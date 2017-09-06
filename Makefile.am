@@ -1,4 +1,4 @@
 AUTOMAKE_OPTIONS = foreign
 SUBDIRS = \
-	src/svaba \
+	deps/SeqLib \
 	src

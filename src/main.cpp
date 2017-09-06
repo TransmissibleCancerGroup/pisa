@@ -9,7 +9,7 @@
 #include "SeqLib/FermiAssembler.h"  // for pure SeqLib assembly
 #include "SeqLib/BWAWrapper.h"  // for realigning contigs
 #include "SeqLib/BFC.h"  // for more control wiht read error correction
-#include "ctpl/ctpl_stl.h"  // threadpool
+#include "ctpl_stl.h"  // threadpool
 //#include "readCorrection.h"
 //#include "readFilter.h"
 

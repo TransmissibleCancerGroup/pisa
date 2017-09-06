@@ -13,6 +13,7 @@ AC_PROG_MAKE_SET
 # Checks for header files.
 AC_LANG([C++])
 AC_CHECK_HEADER([zlib.h])
+AC_CHECK_HEADER([lzma.h])
 
 # Checks for libraries.
 AC_SEARCH_LIBS([gzopen],[z],,[AC_MSG_ERROR([libz not found, please install zlib (http://www.zlib.net/)])])

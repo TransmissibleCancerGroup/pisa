@@ -3,6 +3,7 @@ bin_PROGRAMS = pisa
 # Includes
 pisa_CPPFLAGS = \
 	-I$(top_srcdir)/deps/SeqLib \
+	-I$(top_srcdir)/deps/CTPL \
 	-I$(top_srcdir)/deps/SeqLib/htslib \
 	-I$(top_srcdir)/src -Wno-sign-compare
 

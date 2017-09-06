@@ -17,6 +17,7 @@ AC_CHECK_HEADER([lzma.h])
 
 # Checks for libraries.
 AC_SEARCH_LIBS([gzopen],[z],,[AC_MSG_ERROR([libz not found, please install zlib (http://www.zlib.net/)])])
+AC_SEARCH_LIBS([fdglzma],[AC_MSG_ERROR([lzma not found, please install xz])])
 AC_SEARCH_LIBS([clock_gettime], [rt], [AC_DEFINE([HAVE_CLOCK_GETTIME], [1], [clock_getttime found])], )
 
 # Checks for typedefs, structures, and compiler characteristics.

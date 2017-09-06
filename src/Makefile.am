@@ -3,8 +3,8 @@ bin_PROGRAMS = pisa
 # Includes
 pisa_CPPFLAGS = \
 	-I$(top_srcdir)/deps/SeqLib \
-	-I$(top_srcdir)/deps/CTPL \
 	-I$(top_srcdir)/deps/SeqLib/htslib \
+	-I$(top_srcdir)/deps/CTPL \
 	-I$(top_srcdir)/src -Wno-sign-compare
 
 # Static libs
@@ -16,4 +16,6 @@ pisa_LDADD = \
 
 # Source files
 pisa_SOURCES = \
-	main.cpp
+	main.cpp \
+	$(top_builddir)/src/readCorrection.cpp \
+	$(top_builddir)/src/readFilter.cpp

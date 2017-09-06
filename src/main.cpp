@@ -2,7 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-//#include <svaba/SeqLib/SeqLib/BamWriter.h>
+#include "SeqLib/BamWriter.h"
 //#include "svabaAssemblerEngine.h"  // for SvABA assembly
 //#include "KmerFilter.h"  // for SvABA assembly
 #include "SeqLib/BamReader.h"
@@ -10,8 +10,8 @@
 #include "SeqLib/BWAWrapper.h"  // for realigning contigs
 #include "SeqLib/BFC.h"  // for more control wiht read error correction
 #include "ctpl_stl.h"  // threadpool
-//#include "readCorrection.h"
-//#include "readFilter.h"
+#include "readCorrection.h"
+#include "readFilter.h"
 
 using namespace SeqLib;
 using std::cerr;
@@ -566,14 +566,14 @@ void test(const std::string &filename) {
         writer.WriteRecord(rec);
     }
 
-    auto semimappedContigs = svabaAssemble(semimapped, true);
+    auto semimappedContigs = fermiAssemble(semimapped, true);
     cout << "ASSEMBLE SEMIMAPPED" << endl;
     cout << "assembled " << semimappedContigs.size() << " contigs." << endl;
     printContigs(semimappedContigs, 1000);
     writeContigs("round1.fa", semimappedContigs);
 
     // Build contigs from unmappable read set
-    auto unmappedContigs = svabaAssemble(unmapped, true);
+    auto unmappedContigs = fermiAssemble(unmapped, true);
     cout << "ASSEMBLE UNMAPPED" << endl;
     cout << "assembled " << unmappedContigs.size() << " contigs." << endl;
     printContigs(unmappedContigs, 1000);

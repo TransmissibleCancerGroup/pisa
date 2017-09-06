@@ -1,0 +1,6 @@
+[submodule "deps/SeqLib"]
+	path = deps/SeqLib
+	url = https://github.com/walaj/SeqLib/
+[submodule "deps/CTPL"]
+	path = deps/CTPL
+	url = https://github.com/vit-vit/CTPL.git

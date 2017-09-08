@@ -5,7 +5,7 @@
 #ifndef PISA_READFILTER_H
 #define PISA_READFILTER_H
 
-namespace pisa {
+namespace Pisa {
 
     enum ReadType {
         HalfMappedPair,

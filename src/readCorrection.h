@@ -5,7 +5,7 @@
 #ifndef PISA_READCORRECTION_H
 #define PISA_READCORRECTION_H
 
-namespace pisa {
+namespace Pisa {
 // Use a batch of reads to train an error corrector
     SeqLib::BFC bfcTrain(const SeqLib::BamRecordVector &brv);
 

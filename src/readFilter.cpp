@@ -9,7 +9,7 @@
 #include <SeqLib/BamWriter.h>
 #include "readFilter.h"
 
-namespace pisa {
+namespace Pisa {
 
 // Handles the read-identifying logic
     ReadType ReadFilter::check(const SeqLib::BamRecord &br) {

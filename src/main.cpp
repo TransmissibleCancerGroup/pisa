@@ -1,17 +1,16 @@
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include "SeqLib/BamWriter.h"
-//#include "svabaAssemblerEngine.h"  // for SvABA assembly
-//#include "KmerFilter.h"  // for SvABA assembly
 #include "SeqLib/BamReader.h"
-#include "SeqLib/FermiAssembler.h"  // for pure SeqLib assembly
 #include "SeqLib/BWAWrapper.h"  // for realigning contigs
-#include "SeqLib/BFC.h"  // for more control wiht read error correction
+#include "SeqLib/BFC.h"  // for more control with read error correction
 #include "ctpl_stl.h"  // threadpool
 #include "readCorrection.h"
 #include "readFilter.h"
+#include "threadedFermiAssembler.h"
 
 using namespace SeqLib;
 using std::cerr;
@@ -30,74 +29,24 @@ static const char *USAGE =
         "Usage: pisa <bamfile> <reference.fa>\n";
 
 
-//svabaReadVector toSvabaReadVector(const SeqLib::BamRecordVector &brv) {
-//    svabaReadVector srv;
-//    for (const auto &br : brv) {
-//        svabaRead r(br, "t001");
-//        r.SetSeq(br.Sequence());
-//        srv.push_back(r);
-//    }
-//    return srv;
-//}
-
-
-// Does read correction on SvabaReadVector and updates reads inplace.
-// The corrected sequence is accessed by its .Seq() accessor.
-// The uncorrected sequence still exists and is accessed by its inherited
-// BamRecord .Sequence() accessor.
-//svabaReadVector &kmerCorrect(svabaReadVector &srv) {
-//    KmerFilter kmer;
-//    int kmer_corrected = 0;
-//
-//    std::vector<char*> charVec;  // kmer correction needs raw char pointers
-//    charVec.reserve(srv.size());
-//    for (const auto &r : srv) {
-//        charVec.push_back(strdup(r.Seq().c_str()));  // strdup copy needs to be freed
-//    }
-//    kmer.makeIndex(charVec);
-//
-//    for (auto &i : charVec) {
-//        if (i != nullptr) free(i);  // free memory alloc'ed in strdup
-//    }
-//
-//    kmer_corrected = kmer.correctReads(srv);
-//    cout << "Corrected " << kmer_corrected << " reads." << endl;
-//
-//    return srv;
-//}
-
-
-//std::vector<std::string> svabaAssemble(const SeqLib::BamRecordVector &brv, bool correct = false) {
-//    auto srv = toSvabaReadVector(brv);
-//    if (correct) kmerCorrect(srv);
-//    auto engine = svabaAssemblerEngine("test", 0.025, 40, 125);
-//    engine.fillReadTable(srv);
-//    engine.performAssembly(3);
-//
-//    std::vector<std::string> contigs;
-//    for (auto &contig : engine.getContigs()) {
-//        contigs.push_back(contig.Seq);
-//    }
-//
-//    sort(contigs.begin(), contigs.end(),
-//         [](std::string a, std::string b) {
-//             return a.size() > b.size();
-//         }
-//    );
-//    return contigs;
-//}
+struct pisaOptions {
+    std::string filename;
+    int threads = 1;
+};
 
 
 // Correct, filter and assemble reads in a BamRecordVector, using Fermi
 std::vector<std::string> fermiAssemble(const SeqLib::BamRecordVector &brv,
                                        bool correct = false,
                                        bool aggressiveTrim = false,
+                                       int nthreads = 1,
                                        uint32_t minOverlap = 33) {
     if (brv.empty()) {
         return std::vector<std::string>();
     }
 
-    FermiAssembler fermi;
+    Pisa::ThreadedFermiAssembler fermi;
+    if (nthreads > 1) fermi.SetThreads(nthreads);
     if (aggressiveTrim) fermi.SetAggressiveTrim();
     fermi.SetMinOverlap(minOverlap > 63 ? 63 : minOverlap);
     fermi.AddReads(brv);
@@ -141,7 +90,7 @@ std::vector<std::string> fermiAssembleStrings(const std::vector<std::string> &se
 
 
 void printContigs(const std::vector<std::string> &contigs, int minSize = 250) {
-    unsigned long counter;
+    unsigned long counter = 0;
     for (auto &ctg : contigs) {
         if (ctg.size() > minSize) {
             cout << ">Contig" << counter++ << "_" << ctg.size() << '\n' << ctg << endl;
@@ -271,8 +220,8 @@ void processRegion(int thread_id, std::vector<SeqLib::BamReader> &readers,
 
     // Read correction
     if (correction == Correction::BFC) {
-        SeqLib::BFC readCorrector = pisa::bfcTrain(all_reads);
-        pisa::bfcCorrect(half_mapped, readCorrector);
+        SeqLib::BFC readCorrector = Pisa::bfcTrain(all_reads);
+        Pisa::bfcCorrect(half_mapped, readCorrector);
         // bfcCorrect(unmapped, readCorrector);
     }
 
@@ -427,22 +376,41 @@ void run(unsigned int nthread, const std::string &filename, const std::string &r
 }
 
 
-void extract(const std::string &filename) {
-    cout << "Scanning " << filename << " for insertion-associated reads" << endl;
+void extract(const pisaOptions options) {
+    const std::string filename = options.filename;
+    const int nthreads = options.threads;
+
+    cout << "Scanning " << filename << " for insertion-associated reads, using "
+         << nthreads << " threads" << endl;
+
+    // Set up a thread pool for faster IO
+    auto pool = SeqLib::ThreadPool(nthreads);
+
+    SeqLib::BamReader reader;
+    if (nthreads > 1) reader.SetThreadPool(pool);
 
     // Open the input file
-    SeqLib::BamReader reader;
-    reader.Open(filename);
+    if (!reader.Open(filename)) {
+        cerr << "Failed to open " << filename << endl;
+        std::exit(1);
+    }
     SeqLib::BamHeader header = reader.Header();
     cout << header.IDtoName(0) << endl;
     cout << reader << endl;
     SeqLib::BamRecord br;
-    pisa::ReadFilter filter(10, 20);
+    Pisa::ReadFilter filter(10, 20);
 
     // Three output files
     SeqLib::BamWriter w_semimapped;
     SeqLib::BamWriter w_unmapped;
     SeqLib::BamWriter w_split;
+
+    if (nthreads > 1) {
+        w_semimapped.SetThreadPool(pool);
+        w_unmapped.SetThreadPool(pool);
+        w_split.SetThreadPool(pool);
+    }
+
     w_semimapped.SetHeader(header);
     w_unmapped.SetHeader(header);
     w_split.SetHeader(header);
@@ -457,18 +425,18 @@ void extract(const std::string &filename) {
     while (reader.GetNextRecord(br)) {
         if (++counter % 1000000 == 0) cout << "read " << counter << " " << br << endl;
         switch (filter.check(br)) {
-            case pisa::ReadType::HalfMappedPair:
+            case Pisa::ReadType::HalfMappedPair:
                 w_semimapped.WriteRecord(br);
                 break;
-            case pisa::ReadType::UnmappedPair:
+            case Pisa::ReadType::UnmappedPair:
                 w_unmapped.WriteRecord(br);
                 break;
-            case pisa::ReadType::Split:
+            case Pisa::ReadType::Split:
                 w_split.WriteRecord(br);
                 break;
-            case pisa::ReadType::FilterFail:
+            case Pisa::ReadType::FilterFail:
                 break;
-            case pisa::ReadType::MappedPair:
+            case Pisa::ReadType::MappedPair:
                 break;
             default:
                 assert(false);
@@ -489,11 +457,13 @@ void extract(const std::string &filename) {
 }
 
 
-void assemble(const std::string &filename) {
-    std::string outfile = filename.substr(0, filename.find_last_of(".")) + ".contigs.fa";
-    cout << "Assembling " << filename << endl;
+void assemble(const pisaOptions options) {
+
+    std::string outfile = options.filename.substr(0, options.filename.find_last_of(".")) + ".contigs.fa";
+    cout << "Assembling " << options.filename << endl;
     SeqLib::BamReader reader;
-    reader.Open(filename);
+    if (options.threads > 1) reader.SetThreadPool(options.threads);
+    reader.Open(options.filename);
 
     SeqLib::BamRecord br;
     SeqLib::BamRecordVector brv;
@@ -502,25 +472,33 @@ void assemble(const std::string &filename) {
     }
 
     cout << "Found " << brv.size() << " reads." << endl;
-    SeqLib::FermiAssembler fermi;
-    auto contigs = fermiAssemble(brv, true);
+    Pisa::ThreadedFermiAssembler fermi;
+    auto contigs = fermiAssemble(brv, true, false, options.threads);
     cout << "Writing " << contigs.size() << " contigs to " << outfile << endl;
     writeContigs(outfile, contigs);
 }
 
 
-void test(const std::string &filename) {
-    cout << filename << endl;
+void test(const pisaOptions options) {
+    cout << "Working on file: " << options.filename << endl;
+    cout << "Using " << options.threads << " threads for assembly" << endl;
+
     SeqLib::BamReader reader;
-    reader.Open(filename);
+    SeqLib::BamWriter writer;
+    auto pool = SeqLib::ThreadPool(options.threads);
+
+    reader.SetThreadPool(pool);
+    writer.SetThreadPool(pool);
+
+    reader.Open(options.filename);
     SeqLib::BamHeader header = reader.Header();
     cout << header.IDtoName(0) << endl;
     cout << reader << endl;
     SeqLib::BamRecord br;
     SeqLib::BamRecordVector semimapped;
     SeqLib::BamRecordVector unmapped;
-    pisa::ReadFilter filter(10, 10);
-    SeqLib::BamWriter writer;
+    Pisa::ReadFilter filter(10, 10);
+
     writer.SetHeader(header);
     writer.Open("semimapped.bam");
     writer.WriteHeader();
@@ -529,18 +507,18 @@ void test(const std::string &filename) {
     while (reader.GetNextRecord(br)) {
         if (++counter % 100000 == 0) cout << "read " << counter << " " << br << endl;
         switch (filter.check(br)) {
-            case pisa::ReadType::HalfMappedPair:
+            case Pisa::ReadType::HalfMappedPair:
                 semimapped.push_back(br);
                 break;
-            case pisa::ReadType::UnmappedPair:
+            case Pisa::ReadType::UnmappedPair:
                 unmapped.push_back(br);
                 break;
-            case pisa::ReadType::Split:
+            case Pisa::ReadType::Split:
                 semimapped.push_back(br);
                 break;
-            case pisa::ReadType::FilterFail:
+            case Pisa::ReadType::FilterFail:
                 break;
-            case pisa::ReadType::MappedPair:
+            case Pisa::ReadType::MappedPair:
                 break;
             default:
                 assert(false);
@@ -566,14 +544,14 @@ void test(const std::string &filename) {
         writer.WriteRecord(rec);
     }
 
-    auto semimappedContigs = fermiAssemble(semimapped, true);
+    auto semimappedContigs = fermiAssemble(semimapped, true, false, 4);
     cout << "ASSEMBLE SEMIMAPPED" << endl;
     cout << "assembled " << semimappedContigs.size() << " contigs." << endl;
     printContigs(semimappedContigs, 1000);
     writeContigs("round1.fa", semimappedContigs);
 
     // Build contigs from unmappable read set
-    auto unmappedContigs = fermiAssemble(unmapped, true);
+    auto unmappedContigs = fermiAssemble(unmapped, true, false, 4);
     cout << "ASSEMBLE UNMAPPED" << endl;
     cout << "assembled " << unmappedContigs.size() << " contigs." << endl;
     printContigs(unmappedContigs, 1000);
@@ -584,7 +562,7 @@ void test(const std::string &filename) {
         contigsAsBam.push_back(ctg);
     }
 
-    auto contigs = fermiAssemble(contigsAsBam, true);
+    auto contigs = fermiAssemble(contigsAsBam, true, false, 4);
     cout << "ASSEMBLE SEMIMAPPED AND UNMAPPED ASSEMBLY PRODUCTS" << endl;
     cout << "assembled " << contigs.size() << " contigs." << endl;
     printContigs(contigs, 1000);
@@ -595,7 +573,7 @@ void test(const std::string &filename) {
     for (auto &rec : semimapped) all.push_back(rec);
     semimapped.clear();
     for (auto &rec : unmapped) all.push_back(rec);
-    auto allContigs = fermiAssemble(all, true);
+    auto allContigs = fermiAssemble(all, true, false, 4);
     cout << "ASSEMBLE SEMIMAPPED AND UNMAPPED READS" << endl;
     cout << "assembled " << allContigs.size() << " contigs." << endl;
     printContigs(allContigs, 1000);
@@ -606,7 +584,7 @@ void test(const std::string &filename) {
         contigsAsBam.push_back(ctg);
     }
 
-    auto mixed = fermiAssemble(contigsAsBam);
+    auto mixed = fermiAssemble(contigsAsBam, false, false, 4);
     cout << "ASSEMBLE SEMIMAPPED ASSEMBLY PRODUCTS WITH UNMAPPED READS" << endl;
     cout << "assembled " << mixed.size() << " contigs." << endl;
     printContigs(mixed, 1000);
@@ -619,6 +597,8 @@ void test(const std::string &filename) {
 
 // Handle command line inputs and launch `run`
 int main(int argc, char *args[]) {
+    auto start = std::chrono::steady_clock::now();
+
     if (argc < 3) {
         cerr << TOWER << USAGE << endl;
         exit(1);
@@ -629,9 +609,16 @@ int main(int argc, char *args[]) {
     std::string reference;
     if (argc > 3) reference = args[3];
 
+    pisaOptions opts;
+    opts.filename = filename;
+    opts.threads =  1;
     //run(4, filename, reference);
-    if (program == "extract") extract(filename);
-    if (program == "assemble") assemble(filename);
-    if (program == "test") test(filename);
+    if (program == "extract") extract(opts);
+    if (program == "assemble") assemble(opts);
+    if (program == "test") test(opts);
+
+    auto end = std::chrono::steady_clock::now();
+    auto diff = end - start;
+    cout << std::chrono::duration <double, std::milli> (diff).count() << " ms" << endl;
     return 0;
 }

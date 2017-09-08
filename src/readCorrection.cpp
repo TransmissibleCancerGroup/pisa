@@ -8,7 +8,7 @@
 #include "SeqLib/BamReader.h"
 #include "readCorrection.h"
 
-namespace pisa {
+namespace Pisa {
 // Use a batch of reads to train an error corrector
     SeqLib::BFC bfcTrain(const SeqLib::BamRecordVector &brv) {
         if (brv.empty()) {

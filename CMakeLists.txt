@@ -26,6 +26,6 @@ set(DEPLIBS
         ${CMAKE_SOURCE_DIR}/deps/SeqLib/htslib/libhts.a
         ${CMAKE_SOURCE_DIR}/deps/SeqLib/fermi-lite/libfml.a)
 
-set(SOURCE_FILES src/main.cpp src/readCorrection.cpp src/readFilter.cpp)
+set(SOURCE_FILES src/main.cpp src/readCorrection.cpp src/readFilter.cpp src/threadedFermiAssembler.cpp)
 add_executable(pisa ${SOURCE_FILES})
 target_link_libraries(pisa z lzma bz2 Threads::Threads ${DEPLIBS})

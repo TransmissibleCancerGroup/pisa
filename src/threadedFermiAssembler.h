@@ -155,6 +155,11 @@ namespace Pisa {
     };
 
 
+    std::vector<std::string> fermiAssemble(const SeqLib::BamRecordVector &brv,
+                                           bool correct = false,
+                                           bool aggressiveTrim = false,
+                                           int nthreads = 1,
+                                           uint32_t minOverlap = 33);
 }
 
 #endif

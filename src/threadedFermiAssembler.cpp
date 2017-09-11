@@ -2,6 +2,12 @@
 // Created by Kevin Gori on 07/09/2017.
 //
 
+#include "SeqLib/BFC.h"  // for more control with read error correction
+#include "SeqLib/BWAWrapper.h"  // for realigning contigs
+#include "SeqLib/BamReader.h"
+#include "SeqLib/BamWriter.h"
+#include <iostream>
+#include <algorithm>
 #include "threadedFermiAssembler.h"
 #define MAG_MIN_NSR_COEF .1
 
@@ -177,4 +183,30 @@ namespace Pisa {
         return r;
     }
 
+    // Correct, filter and assemble reads in a BamRecordVector, using Fermi
+    std::vector<std::string> fermiAssemble(const SeqLib::BamRecordVector &brv,
+                                           bool correct,
+                                           bool aggressiveTrim,
+                                           int nthreads,
+                                           uint32_t minOverlap) {
+        if (brv.empty()) {
+            return std::vector<std::string>();
+        }
+
+        Pisa::ThreadedFermiAssembler fermi;
+        if (nthreads > 1) fermi.SetThreads(nthreads);
+        if (aggressiveTrim) fermi.SetAggressiveTrim();
+        fermi.SetMinOverlap(minOverlap > 63 ? 63 : minOverlap);
+        fermi.AddReads(brv);
+        if (correct) fermi.CorrectReads();
+        fermi.PerformAssembly();
+
+        std::vector<std::string> contigs = fermi.GetContigs();
+        sort(contigs.begin(), contigs.end(),
+             [](std::string a, std::string b) {
+                 return a.size() > b.size();
+             }
+        );
+        return contigs;
+    }
 }

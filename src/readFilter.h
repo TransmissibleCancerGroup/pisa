@@ -4,6 +4,7 @@
 
 #ifndef PISA_READFILTER_H
 #define PISA_READFILTER_H
+#include "SeqLib/BamRecord.h"
 
 namespace Pisa {
 

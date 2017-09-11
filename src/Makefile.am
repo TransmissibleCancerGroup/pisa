@@ -19,4 +19,8 @@ pisa_SOURCES = \
 	main.cpp \
 	$(top_builddir)/src/readCorrection.cpp \
 	$(top_builddir)/src/readFilter.cpp \
-	$(top_builddir)/src/ThreadedFermiAssembler.cpp
+	$(top_builddir)/src/ThreadedFermiAssembler.cpp \
+    $(top_builddir)/src/pisaExtract.cpp \
+    $(top_builddir)/src/pisaAssemble.cpp \
+    $(top_builddir)/src/pisaTest.cpp \
+    $(top_builddir)/src/utility.cpp
